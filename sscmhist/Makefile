@@ -1,8 +1,8 @@
 TARGET = sscmhist.exe
 LIBS = sscmapi.lib
 CC = cl
-INLCUDE_PATH = "C:\Progs\Perforce\Surround SCM\API\include"
-LIB_PATH = "C:\Progs\Perforce\Surround SCM\API\lib"
+INLCUDE_PATH = "C:\Program Files\Perforce\Surround SCM\API\include"
+LIB_PATH = "C:\Program Files\Perforce\Surround SCM\API\lib64"
 
 all: sscmhist
 

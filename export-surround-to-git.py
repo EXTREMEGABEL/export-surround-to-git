@@ -59,6 +59,7 @@ import os
 import pathlib
 import shutil
 import math
+import codecs
 
 
 #
@@ -214,7 +215,7 @@ class SSCM:
 
 def verify_surround_environment(sscm):
     # verify we have sscm client installed and in PATH
-    cmd = sscm.exe + " version"
+    cmd = sscm.exe + " version +u"
     with open(os.devnull, 'w') as fnull:
         p = subprocess.Popen(cmd, shell=True, stdout=fnull, stderr=fnull)
         p.communicate()
@@ -225,8 +226,8 @@ def get_lines_from_sscm_cmd(sscm_cmd):
     # helper function to clean each item on a line since sscm has lots of newlines
     p = subprocess.Popen(sscm_cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     stdoutdata, stderrdata = p.communicate()
-    stdoutdata = stdoutdata.decode('utf8')
-    stderrdata = (stderrdata.strip()).decode('utf8')
+    stdoutdata = stdoutdata.decode('utf-8')
+    stderrdata = (stderrdata.strip()).decode('utf-8')
 
     lines = [real_line for real_line in stdoutdata.splitlines() if real_line]
     return lines, stderrdata
@@ -235,7 +236,7 @@ def get_lines_from_sscm_cmd(sscm_cmd):
 def find_all_branches_in_mainline_containing_path(mainline, path, sscm):
     # use the -o command on lsbranch to get a full path definition of each
     # branch. This will help us parse later
-    cmd = sscm.exe + ' lsbranch -b"%s" -p"%s" -o ' % (mainline, path)
+    cmd = sscm.exe + ' lsbranch +u -b"%s" -p"%s" -o ' % (mainline, path)
     if sscm.username and sscm.password:
         cmd = cmd + '-y"%s":"%s" ' % (sscm.username, sscm.password)
 
@@ -251,16 +252,27 @@ def find_all_branches_in_mainline_containing_path(mainline, path, sscm):
     our_branches = {}
     # Parse the branches and find the branches in the path provided
     for branch in branches:
+        print("path:" , str(path))
         if branch.startswith(str(path)):
             # Since the branch currently shows the full path we need to get the
             # the branch name by getting only the last element in the path
-            match = re.search(r'(.+\/([^\/]+))\s\<(.+)>\s\((baseline|mainline|snapshot)\)', branch)
-            found_branch = pathlib.PurePosixPath(match.group(1))
+            print(branch)
+            match = re.search("(.+\/([^\/]+))\s\<(.*)>\s\((baseline|mainline|snapshot)\)", branch)
+            if match is not None:
+                found_branch = pathlib.PurePosixPath(match.group(1))
+            else:
+                found_branch = path
+                tmp = pathlib.PurePosixPath(path)
+                our_branches[found_branch] = tmp
+                continue
+            print("Found branch:", found_branch, "path:" , str(path))
             if str(found_branch).startswith((str(path) + '/')) or found_branch == path:
                 branch_repo = pathlib.PurePosixPath(match.group(3))
+                print("branch repo:", branch_repo)
                 if str(branch_repo).startswith((str(path) + '/')) or branch_repo == path:
                     our_branches[found_branch.name] = branch_repo
 
+    print(our_branches)
     return our_branches
 
 
@@ -269,12 +281,13 @@ def find_all_files_in_branches_under_path(branches, sscm):
     for branch in branches:
         sys.stderr.write("[*] Looking for files in branch '%s' ...\n" % branch)
 
-        cmd = sscm.exe + ' ls -b"%s" -p"%s" -r ' % (branch, branches[branch])
+        cmd = sscm.exe + ' +u ls -b"%s" -p"%s" -r ' % (branch, branches[branch])
         if sscm.username and sscm.password:
             cmd = cmd + '-y"%s":"%s" ' % (sscm.username, sscm.password)
 
         lines, stderrdata = get_lines_from_sscm_cmd(cmd)
-
+        print(lines)
+        exit()
         if stderrdata:
             sys.stderr.write('[*] sscm error from cmd ls: %s\n' % stderrdata)
 
@@ -304,7 +317,7 @@ def find_all_files_in_branches_under_path(branches, sscm):
 
 def is_snapshot_branch(branch, repo, sscm):
     # TODO can we eliminate 'repo' as an argument to this function?
-    cmd = sscm.exe + ' branchproperty -b"%s" -p"%s" ' % (branch, repo)
+    cmd = sscm.exe + ' +u branchproperty -b"%s" -p"%s" ' % (branch, repo)
     if sscm.username and sscm.password:
             cmd = cmd + '-y"%s":"%s" ' % (sscm.username, sscm.password)
     with open(os.devnull, 'w') as fnull:
@@ -313,7 +326,7 @@ def is_snapshot_branch(branch, repo, sscm):
 
 
 def get_file_rename(version, file, repo, branch, sscm):
-    cmd = sscm.exe + ' history "%s" -b"%s" -p"%s" -v"%d:%d" ' % (file, branch, repo, version, version)
+    cmd = sscm.exe + ' +u history "%s" -b"%s" -p"%s" -v"%d:%d" ' % (file, branch, repo, version, version)
     if sscm.username and sscm.password:
         cmd += '-y"%s":"%s" ' % (sscm.username, sscm.password)
 
@@ -559,12 +572,12 @@ def print_blob_for_file(branch, fullPath, sscm, scratchDir, timestamp=None):
         # get specified version. You would think the -v option would get the
         # version of the file you want, but this does not work for deleted files.
         # we need to use the time stamp with -s
-        cmd = sscm.exe + ' get "%s" -b"%s" -p"%s" -d"%s" -f -i -s"%s" -e ' % (file, branch, path, scratchDir.name, time_string)
+        cmd = sscm.exe + ' +u get "%s" -b"%s" -p"%s" -d"%s" -f -i -s"%s" -e ' % (file, branch, path, scratchDir.name, time_string)
         if sscm.username and sscm.password:
             cmd = cmd + '-y"%s":"%s" ' % (sscm.username, sscm.password)
     else:
         # get newest version
-        cmd = sscm.exe + ' get "%s" -b"%s" -p"%s" -d"%s" -f -i -e ' % (file, branch, path, scratchDir.name)
+        cmd = sscm.exe + ' +u get "%s" -b"%s" -p"%s" -d"%s" -f -i -e ' % (file, branch, path, scratchDir.name)
         if sscm.username and sscm.password:
             cmd = cmd + '-y"%s":"%s" ' % (sscm.username, sscm.password)
     with open(os.devnull, 'w') as fnull:
