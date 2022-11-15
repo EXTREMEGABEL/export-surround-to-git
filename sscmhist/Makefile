@@ -1,10 +1,25 @@
 TARGET = sscmhist.exe
-LIBS = sscmapi.lib
-CC = cl
-INLCUDE_PATH = "C:\Program Files\Perforce\Surround SCM\API\include"
-LIB_PATH = "C:\Program Files\Perforce\Surround SCM\API\lib64"
+LIBS = -lsscmapi -Xlinker --verbose
+CC = gcc 
+CFLAGS= -g -Wall -std=c99 -I/var/lib/SurroundSCM/API/include/
 
-all: sscmhist
 
-sscmhist:
-	$(CC) /Fe:$(TARGET) /I $(INLCUDE_PATH) sscmhist.c $(LIBS) /link /LIBPATH:$(LIB_PATH)
+.PHONY: default all clean
+
+default: $(TARGET)
+all: default
+
+OBJECTS = $(patsubst %.c, %.o, $(wildcard *.c))
+HEADERS = $(wildcard *.h)
+
+%.o: %.c $(HEADERS)
+	$(CC) $(CFLAGS) -c $< -o $@
+
+.PRECIOUS: $(TARGET) $(OBJECTS)
+
+$(TARGET): $(OBJECTS)
+	$(CC) $(OBJECTS) -Wall $(LIBS) -o $@
+
+clean:
+	-rm -f *.o
+	-rm -f $(TARGET)

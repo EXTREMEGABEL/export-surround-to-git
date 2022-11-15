@@ -29,23 +29,23 @@
 # attempt to support both Python2.6+ and Python3
 from __future__ import print_function
 from enum import unique
+import pickle
 
-
-VERSION = '0.5.0'
+VERSION = '0.5.1'
 
 
 # Environment:  For now, this script requires:
-#   * Python 2.7
+#   * Python 3.10
 #   * Bash
 #   * sscm command-line client (in path)
 
 # Last tested using:
-#   * Python 2.7.6
-#   * GNU bash, version 4.3.11(1)-release (i686-pc-linux-gnu)
-#   * sscm command-line client version:  2013.0.0 Build 23 (Linux)
-#   * Git version 1.9.1
-#   * Ubuntu 14.04.1 LTS
-#   * Linux 3.13.0-35-generic #62-Ubuntu SMP Fri Aug 15 01:58:01 UTC 2014 i686 i686 i686 GNU/Linux
+#   * Python 3.10
+#   * GNU bash, version 5.1.16(1)-release (x86_64-pc-linux-gnu)
+#   * sscm command-line client version:  2021.1.2 Build 12 (Linux/x64)
+#   * Git version 2.34.1
+#   * Ubuntu 22.04.1 LTS
+#   * Linux 5.15.0-52-generic
 
 
 import sys
@@ -70,8 +70,8 @@ import codecs
 mark = 0
 
 # local time zone
-# TODO how detect this?  right now we assume EST.
-timezone = "-0500"
+# TODO how detect this?  right now we assume CET.
+timezone = "+0100"
 
 # keeps track of snapshot name --> mark number pairing
 tagDict = {}
@@ -252,11 +252,11 @@ def find_all_branches_in_mainline_containing_path(mainline, path, sscm):
     our_branches = {}
     # Parse the branches and find the branches in the path provided
     for branch in branches:
-        print("path:" , str(path))
+        #print("path:" , str(path))
         if branch.startswith(str(path)):
             # Since the branch currently shows the full path we need to get the
             # the branch name by getting only the last element in the path
-            print(branch)
+            #print(branch)
             match = re.search("(.+\/([^\/]+))\s\<(.*)>\s\((baseline|mainline|snapshot)\)", branch)
             if match is not None:
                 found_branch = pathlib.PurePosixPath(match.group(1))
@@ -265,14 +265,14 @@ def find_all_branches_in_mainline_containing_path(mainline, path, sscm):
                 tmp = pathlib.PurePosixPath(path)
                 our_branches[found_branch] = tmp
                 continue
-            print("Found branch:", found_branch, "path:" , str(path))
+            #print("Found branch:", found_branch, "path:" , str(path))
             if str(found_branch).startswith((str(path) + '/')) or found_branch == path:
                 branch_repo = pathlib.PurePosixPath(match.group(3))
-                print("branch repo:", branch_repo)
+                #print("branch repo:", branch_repo)
                 if str(branch_repo).startswith((str(path) + '/')) or branch_repo == path:
                     our_branches[found_branch.name] = branch_repo
 
-    print(our_branches)
+    #print(our_branches)
     return our_branches
 
 
@@ -286,8 +286,8 @@ def find_all_files_in_branches_under_path(branches, sscm):
             cmd = cmd + '-y"%s":"%s" ' % (sscm.username, sscm.password)
 
         lines, stderrdata = get_lines_from_sscm_cmd(cmd)
-        print(lines)
-        exit()
+        #print(lines)
+        #exit()
         if stderrdata:
             sys.stderr.write('[*] sscm error from cmd ls: %s\n' % stderrdata)
 
@@ -311,6 +311,8 @@ def find_all_files_in_branches_under_path(branches, sscm):
                 file = line[:end_file_index].strip()
                 fullPath = pathlib.PurePosixPath("%s/%s" % (lastDirectory, file))
                 fileSet.add(fullPath)
+        #for testing if the c program is called correctly
+        #break
 
     return fileSet
 
@@ -369,6 +371,7 @@ def find_all_file_versions(mainline, branch, path, sscm):
         # TODO handle this better
         cmd += 'NULL NULL '
     cmd += '"%s" "%s" "%s" "%s"' % (branch, branch, repo, file)
+    #print(cmd)
 
     lines, stderrdata = get_lines_from_sscm_cmd(cmd)
     if stderrdata:
@@ -437,6 +440,7 @@ def create_database():
 
 def add_record_to_database(record, database):
     c = database.cursor()
+    #print(record.get_tuple())
     try:
         c.execute('''INSERT INTO operations VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', record.get_tuple())
     except sqlite3.IntegrityError as e:
@@ -453,12 +457,18 @@ def add_record_to_database(record, database):
 def cmd_parse(mainline, path, database, sscm):
     sys.stderr.write("[+] Beginning parse phase...\n")
 
-    repo = pathlib.PurePosixPath(path)
+    repo = pathlib.PurePosixPath(path).as_posix()
 
     branches = find_all_branches_in_mainline_containing_path(mainline, repo, sscm)
 
-    # NOTE how we're passing branches, not branch.  this is to detect deleted files.
-    filesToWalk = find_all_files_in_branches_under_path(branches, sscm)
+    if not os.path.isfile("files.p"):
+       # NOTE how we're passing branches, not branch.  this is to detect deleted files.
+        filesToWalk = find_all_files_in_branches_under_path(branches, sscm)
+        # use pickle to cache files since we have "billions" of branches and i'm tired of waiting forever just to fix up some python error later in the process... 
+        pickle.dump(filesToWalk, open("files.p", "wb"))
+    else:
+        #print("[*] cached file list found")
+        filesToWalk = pickle.load(open("files.p", "rb"))
 
     for branch in branches:
         # Skip snapshot branches
@@ -506,7 +516,7 @@ def cmd_parse(mainline, path, database, sscm):
                         elif action == SSCMFileAction.FileMoved:
                             origFullPath = str(origPath / fileWalk)
                             data = str(data / fileWalk)
-                    add_record_to_database(DatabaseRecord((timestamp, actionMap[action], mainline, branch, str(fullPathWalk), origFullPath, version, author, comment, data, str(repo))), database)
+                    add_record_to_database(DatabaseRecord((timestamp, actionMap[action], mainline, branch, str(fullPathWalk.as_posix()), origFullPath, version, author, comment, data, str(repo))), database)
 
     sys.stderr.write("[+] Parse phase complete\n")
 

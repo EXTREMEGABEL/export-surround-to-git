@@ -57,9 +57,9 @@ int main(int argc, char *argv[])
             printf("%u\n", ppItems[i]->version);
             printf("%u\n", (unsigned int) ppItems[i]->date);
             printf("%d\n", ppItems[i]->action);
-            printf("%s\n", ppItems[i]->pActionBranch);
-            printf("%s\n", ppItems[i]->pUsername);
-            printf("%s\n", ppItems[i]->pComment);
+            if(ppItems[i]->pActionBranch != NULL){printf("%s\n", ppItems[i]->pActionBranch);}else{printf(" \n");}
+            if(ppItems[i]->pUsername != NULL){printf("%s\n", ppItems[i]->pUsername);}else{printf(" \n");}
+            if(ppItems[i]->pComment != NULL){printf("%s\n", ppItems[i]->pComment);}else{printf(" \n");}
             printf("--END_COMMENT--\n\n");
         }
     }
